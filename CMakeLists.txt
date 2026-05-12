@@ -20,3 +20,17 @@ FetchContent_Declare(
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+include(GoogleTest)
+
+# Test executable
+add_executable(fools-gambit-tests
+    tests/test_main.cpp
+)
+
+target_link_libraries(fools-gambit-tests
+    GTest::gtest_main
+)
+
+gtest_discover_tests(fools-gambit-tests)
