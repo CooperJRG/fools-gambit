@@ -1,4 +1,9 @@
 #include "chess_board.h"
+#include "board/bitboard.h"
+#include "board/square.h"
+#include "board/color.h"
+#include "board/piece_type.h"
+#include "movegen/move.h"
 #include <vector>
 #include <sstream>
 
@@ -101,7 +106,12 @@ void ChessBoard::loadFEN(const std::string &fen) {
     std::string halfmoveClockStr = fenParts[4];
     std::string fullmoveNumberStr = fenParts[5];
 
-    sideToMove = (sideToMoveStr == "w") ? Color::White : Color::Black;
+    switch (sideToMoveStr[0]) {
+        case 'w': sideToMove = Color::White; break;
+        case 'b': sideToMove = Color::Black; break;
+        default:
+            throw std::invalid_argument("Invalid FEN string: Invalid side to move");
+    }
 
     for (char c : castlingRightsStr) {
         switch (c) {
@@ -119,7 +129,12 @@ void ChessBoard::loadFEN(const std::string &fen) {
         if (c >= 'a' && c <= 'h') {
             int file = c - 'a';
             int rank = enPassantStr[1] - '1';
+            if (rank != 2 && rank != 5) {
+                throw std::invalid_argument("Invalid FEN string: En passant square must be on rank 3 or 6");
+            }
             enPassantSquare = static_cast<Square>(rank * 8 + file);
+        } else {
+            throw std::invalid_argument("Invalid FEN string: Invalid en passant square");
         }
     }
 
@@ -131,6 +146,9 @@ void ChessBoard::loadFEN(const std::string &fen) {
     for (char c : piecePlacement) {
         if (c == '/') {
             rank--;
+            if (file != 8) {
+                throw std::invalid_argument("Invalid FEN string: Incorrect number of squares in a rank");
+            }
             file = 0;
         } else if (isdigit(c)) {
             file += c - '0'; // Skip empty squares
@@ -153,9 +171,14 @@ void ChessBoard::loadFEN(const std::string &fen) {
                 case 'r': blackRooks = setBit(blackRooks, square); break;
                 case 'q': blackQueens = setBit(blackQueens, square); break;
                 case 'k': blackKing = setBit(blackKing, square); break;
+                default:
+                    throw std::invalid_argument("Invalid FEN string: Unknown piece type");
             }
             file++;
         }
+    }
+    if (rank != 0 || file != 8) {
+        throw std::invalid_argument("Invalid FEN string: Incorrect number of ranks or squares");
     }
     updateOccupancy();
 }
@@ -206,13 +229,13 @@ std::string ChessBoard::toFEN() const {
 
     if (castlingRights == 0) {
         fen += '-';
-    } else if (castlingRights & 0b0001) {
+    }  if (castlingRights & 0b0001) {
         fen += "K";
-    } else if (castlingRights & 0b0010) {
+    }  if (castlingRights & 0b0010) {
         fen += "Q";
-    } else if (castlingRights & 0b0100) {
+    }  if (castlingRights & 0b0100) {
         fen += "k";
-    } else if (castlingRights & 0b1000) {
+    }  if (castlingRights & 0b1000) {
         fen += "q";
     }
 
@@ -231,4 +254,255 @@ std::string ChessBoard::toFEN() const {
     fen += std::to_string(fullmoveNumber);
 
     return fen;
+}
+
+void ChessBoard::makeMove(const Move& move) {
+    Square from = move.from();
+    Square to = move.to();
+    MoveFlag flag = move.flag();
+
+    Bitboard *movingPieceBoard = getBoardForSquare(from, sideToMove);
+    if (movingPieceBoard == nullptr) {
+        throw std::invalid_argument("Invalid move: No piece on the source square");
+    }
+    updateCastlingRights(from, to);
+
+    *movingPieceBoard = clearBit(*movingPieceBoard, from);
+
+    if (!handleCapture(to, flag)) {
+        handleCastling(to, flag); // Small optimization to avoid checking for castling if a capture was made, since captures can't be castling moves.
+    } else {
+        // If a capture was made, we need to reset the halfmove clock to 0, since captures reset the halfmove clock.
+        halfmoveClock = -1; // We will increment it to 0 in updateGameState() after making the move.
+    }
+
+    placeMovingPiece(to, flag, movingPieceBoard);
+
+    // Update game state (castling rights, en passant square, halfmove clock, fullmove number)
+    updateGameState(move);
+
+    updateOccupancy();
+
+    // Switch the side to move
+    sideToMove = !sideToMove;
+}
+
+Bitboard* ChessBoard::getBoardForSquare(Square square, Color color) {
+    if (color == Color::White) {
+        if (isBitSet(whitePawns, square))   return &whitePawns;
+        if (isBitSet(whiteKnights, square)) return &whiteKnights;
+        if (isBitSet(whiteBishops, square)) return &whiteBishops;
+        if (isBitSet(whiteRooks, square))   return &whiteRooks;
+        if (isBitSet(whiteQueens, square))  return &whiteQueens;
+        if (isBitSet(whiteKing, square))    return &whiteKing;
+    } else {
+        if (isBitSet(blackPawns, square))   return &blackPawns;
+        if (isBitSet(blackKnights, square)) return &blackKnights;
+        if (isBitSet(blackBishops, square)) return &blackBishops;
+        if (isBitSet(blackRooks, square))   return &blackRooks;
+        if (isBitSet(blackQueens, square))  return &blackQueens;
+        if (isBitSet(blackKing, square))    return &blackKing;
+    }
+    return nullptr;
+}
+
+// I want to mark this for potential room for improvement as it adds redundant checks for whether the
+// moving piece is a king or rook, since we will already know that from the move generation phase.
+// We could potentially optimize this in a couple of ways. TODO
+void ChessBoard::updateCastlingRights(const Square from, const Square to) {
+    if (castlingRights == 0) {
+        return; // No castling rights to update, so we can skip the checks.
+    }
+    // Check if the moving piece is a king or rook, since we need to update castling rights if either of those pieces move.{
+    if (isBitSet(whiteKing, from) || isBitSet(blackKing, from)) {
+        // If the king moves, we lose all castling rights for that color.
+        if (sideToMove == Color::White) {
+            castlingRights &= 0b1100; // Clear white's castling rights
+        } else {
+            castlingRights &= 0b0011; // Clear black
+        }
+    } else if (isBitSet(whiteRooks, from) || isBitSet(blackRooks, from) || isBitSet(whiteRooks, to) || isBitSet(blackRooks, to)) {
+        // If a rook moves or is captured, we lose the castling right for that rook's side.
+        if (sideToMove == Color::White) {
+            if (from == Square::h1) {
+                castlingRights &= 0b1110; // Clear white kingside
+            } else if (from == Square::a1) {
+                castlingRights &= 0b1101; // Clear white queenside
+            } else if (to == Square::h8) {
+                castlingRights &= 0b1011; // Clear black kingside (capture)
+            } else if (to == Square::a8) {
+                castlingRights &= 0b0111; // Clear black queenside (capture)
+            }
+        } else {
+            if (from == Square::h8) {
+                castlingRights &= 0b1011; // Clear black kingside
+            } else if (from == Square::a8) {
+                castlingRights &= 0b0111; // Clear black queenside
+            } else if (to == Square::h1) {
+                castlingRights &= 0b1110; // Clear white kingside (capture)
+            } else if (to == Square::a1) {
+                castlingRights &= 0b1101; // Clear white queenside (capture)
+            }
+        }
+    }
+}
+
+bool ChessBoard::handleCapture(const Square to, const MoveFlag flag) {
+    // This function will handle the logic for capturing a piece on the destination square.
+    // It will check if there is an opponent's piece on the destination square and clear it from the appropriate bitboard.
+    //     if (flag == MoveFlag::Capture || (flag >= MoveFlag::KnightPromotionCapture && flag <= MoveFlag::QueenPromotionCapture)) {
+    // Clear the captured piece from the opponent's bitboards
+    if (flag == MoveFlag::Capture || (flag >= MoveFlag::KnightPromotionCapture && flag <= MoveFlag::QueenPromotionCapture)) {
+        // Clear the captured piece from the opponent's bitboards
+        Square capturedSquare = to;
+        Bitboard *capturedPieceBoard = getBoardForSquare(capturedSquare, !sideToMove);
+        if (capturedPieceBoard) {
+            *capturedPieceBoard = clearBit(*capturedPieceBoard, capturedSquare);
+            return true; // Capture was made
+        }
+    } else if (flag == MoveFlag::EnPassant) {
+        // Clear the captured pawn for en passant
+        Square capturedSquare = static_cast<Square>(static_cast<int>(to) + ((sideToMove == Color::White) ? -8 : 8));
+        Bitboard *capturedPieceBoard = getBoardForSquare(capturedSquare, !sideToMove);
+        if (capturedPieceBoard) {
+            *capturedPieceBoard = clearBit(*capturedPieceBoard, capturedSquare);
+            return true; // Capture was made
+        }
+    }
+    return false; // No capture was made
+}
+
+void ChessBoard::handleCastling(const Square to, const MoveFlag flag) {
+    // This function will handle the logic for castling moves. It will move the rook to the appropriate square based on whether it's kingside or queenside castling.
+    if (flag == MoveFlag::KingCastle) {
+        // Move the rook for kingside castling
+        Square rookFrom = (sideToMove == Color::White) ? Square::h1 : Square::h8;
+        Square rookTo = (sideToMove == Color::White) ? Square::f1 : Square::f8;
+        Bitboard *rookBoard = (sideToMove == Color::White) ? &whiteRooks : &blackRooks;
+        *rookBoard = clearBit(*rookBoard, rookFrom);
+        *rookBoard = setBit(*rookBoard, rookTo);
+    } else if (flag == MoveFlag::QueenCastle) {
+        // Move the rook for queenside castling
+        Square rookFrom = (sideToMove == Color::White) ? Square::a1 : Square::a8;
+        Square rookTo = (sideToMove == Color::White) ? Square::d1 : Square::d8;
+        Bitboard *rookBoard = (sideToMove == Color::White) ? &whiteRooks : &blackRooks;
+        *rookBoard = clearBit(*rookBoard, rookFrom);
+        *rookBoard = setBit(*rookBoard, rookTo);
+    }
+}
+
+void ChessBoard::placeMovingPiece(const Square to, const MoveFlag flag, Bitboard* movingBoard) {
+    // This function will place the moving piece on the destination square. It will also handle promotions by placing the promoted piece instead of the pawn.
+    if (flag >= MoveFlag::KnightPromotion && flag <= MoveFlag::QueenPromotionCapture) {
+        // Handle promotions by clearing the pawn and setting the promoted piece
+        PieceType promotionType = static_cast<PieceType>(static_cast<uint8_t>(flag) - static_cast<uint8_t>(MoveFlag::KnightPromotion) + 2);
+        Bitboard *promotionBoard = nullptr;
+        if (sideToMove == Color::White) {
+            switch (promotionType) {
+                case PieceType::Knight: promotionBoard = &whiteKnights; break;
+                case PieceType::Bishop: promotionBoard = &whiteBishops; break;
+                case PieceType::Rook:   promotionBoard = &whiteRooks; break;
+                case PieceType::Queen:  promotionBoard = &whiteQueens; break;
+                default: break;
+            }
+        } else {
+            switch (promotionType) {
+                case PieceType::Knight: promotionBoard = &blackKnights; break;
+                case PieceType::Bishop: promotionBoard = &blackBishops; break;
+                case PieceType::Rook:   promotionBoard = &blackRooks; break;
+                case PieceType::Queen:  promotionBoard = &blackQueens; break;
+                default: break;
+            }
+        }
+        if (promotionBoard) {
+            *promotionBoard = setBit(*promotionBoard, to);
+        }
+    } else {
+        *movingBoard = setBit(*movingBoard, to);
+    }
+}
+
+void ChessBoard::updateGameState(const Move &move) {
+    // This function will update the game state after a move is made. It will handle updating castling rights, en passant square, halfmove clock, and fullmove number based on the move made.
+    MoveFlag flag = move.flag();
+
+    // Update castling rights if a rook or king moves
+    if (flag == MoveFlag::KingCastle || flag == MoveFlag::QueenCastle) {
+        if (sideToMove == Color::White) {
+            castlingRights &= 0b1100; // Clear white's castling rights
+        } else {
+            castlingRights &= 0b0011; // Clear black's castling rights
+        }
+    }
+
+    // If pawn double move, then set en passant square
+    if (flag == MoveFlag::DoublePush) {
+        enPassantSquare = static_cast<Square>(static_cast<int>(move.to()) + ((sideToMove == Color::White) ? -8 : 8));
+    } else {
+        enPassantSquare = Square::NoSquare;
+    }
+
+    // Update game halfmoveClock
+    halfmoveClock++;
+    fullmoveNumber += (sideToMove == Color::Black) ? 1 : 0;
+}
+
+// Move from UCI move string (e.g., "e2e4") to Move struct. This will be useful for parsing moves from the user interface or from a PGN file.
+Move ChessBoard::parseMove(const std::string &uciMove, const ChessBoard &board){
+    int fromFile = uciMove[0] - 'a';
+    int fromRank = uciMove[1] - '1';
+    int toFile   = uciMove[2] - 'a';
+    int toRank   = uciMove[3] - '1';
+
+    Square from = static_cast<Square>(fromRank * 8 + fromFile);
+    Square to   = static_cast<Square>(toRank   * 8 + toFile);
+
+    MoveFlag flag = MoveFlag::Quiet;
+
+    if (uciMove.size() == 5) {
+        switch (uciMove[4]) {
+            case 'n': flag = isBitSet(board.allPieces, to) ? MoveFlag::KnightPromotionCapture : MoveFlag::KnightPromotion; break;
+            case 'b': flag = isBitSet(board.allPieces, to) ? MoveFlag::BishopPromotionCapture : MoveFlag::BishopPromotion; break;
+            case 'r': flag = isBitSet(board.allPieces, to) ? MoveFlag::RookPromotionCapture   : MoveFlag::RookPromotion;   break;
+            case 'q': flag = isBitSet(board.allPieces, to) ? MoveFlag::QueenPromotionCapture  : MoveFlag::QueenPromotion;  break;
+        }
+    } else if (isBitSet(board.allPieces, to)) {
+        flag = MoveFlag::Capture;
+    } else if (to == board.enPassantSquare && isBitSet(board.whitePawns | board.blackPawns, from)) {
+        flag = MoveFlag::EnPassant;
+    } else if (isBitSet(board.whitePawns | board.blackPawns, from) && abs(fromRank - toRank) == 2) {
+        flag = MoveFlag::DoublePush;
+    } else if (isBitSet(board.whiteKing | board.blackKing, from) && abs(fromFile - toFile) == 2) {
+        flag = (toFile > fromFile) ? MoveFlag::KingCastle : MoveFlag::QueenCastle;
+    }
+
+    return Move::make(from, to, flag);
+}
+
+std::string ChessBoard::moveToUCI(const Move &move){
+    Square from = move.from();
+    Square to   = move.to();
+
+    int fromIdx = static_cast<int>(from);
+    int toIdx   = static_cast<int>(to);
+
+    std::string uci;
+    uci += static_cast<char>('a' + (fromIdx % 8));
+    uci += static_cast<char>('1' + (fromIdx / 8));
+    uci += static_cast<char>('a' + (toIdx   % 8));
+    uci += static_cast<char>('1' + (toIdx   / 8));
+
+    switch (move.flag()) {
+        case MoveFlag::KnightPromotion:        uci += 'n'; break;
+        case MoveFlag::BishopPromotion:        uci += 'b'; break;
+        case MoveFlag::RookPromotion:          uci += 'r'; break;
+        case MoveFlag::QueenPromotion:         uci += 'q'; break;
+        case MoveFlag::KnightPromotionCapture: uci += 'n'; break;
+        case MoveFlag::BishopPromotionCapture: uci += 'b'; break;
+        case MoveFlag::RookPromotionCapture:   uci += 'r'; break;
+        case MoveFlag::QueenPromotionCapture:  uci += 'q'; break;
+        default: break;
+    }
+
+    return uci;
 }

@@ -31,6 +31,9 @@ include(GoogleTest)
 add_executable(fools-gambit-tests
     tests/test_main.cpp
     tests/board/test_bitboard.cpp
+    tests/board/test_board.cpp
+    tests/board/test_move.cpp
+    src/board/chess_board.cpp
 )
 
 target_include_directories(fools-gambit-tests PRIVATE ${CMAKE_SOURCE_DIR}/src)

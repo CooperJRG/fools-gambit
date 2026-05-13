@@ -14,40 +14,40 @@ Each engine version is tagged when the corresponding `[E-vX.Y]` task completes. 
 ## Phase 0 — Foundation (no gates)
 
 ### Track E — Engine Core
-- [ ] **E-001** Set up CMake project, C++20/23
-- [ ] **E-002** Add test framework (GoogleTest or Catch2)
-- [ ] **E-003** Configure clang-format and clang-tidy
-- [ ] **E-004** Stub `main.cpp` that launches and exits cleanly
-- [ ] **E-005** Confirm `cmake --build .`, `ctest`, and `./foolsgambit` all run
+- [x] **E-001** Set up CMake project, C++20/23
+- [x] **E-002** Add test framework (GoogleTest or Catch2)
+- [x] **E-003** Configure clang-format and clang-tidy
+- [x] **E-004** Stub `main.cpp` that launches and exits cleanly
+- [x] **E-005** Confirm `cmake --build .`, `ctest`, and `./foolsgambit` all run
 
 ### Track T — Testing & Measurement
-- [ ] **T-001** Empty test passes in CTest
-- [ ] **T-002** Create `tests/` directory structure (board, movegen, search, nnue, perft)
+- [x] **T-001** Empty test passes in CTest
+- [x] **T-002** Create `tests/` directory structure (board, movegen, search, nnue, perft)
 
 ### Track D — Documentation
-- [ ] **D-001** Initialize repo with `README.md` skeleton
-- [ ] **D-002** Create `docs/roadmap.md`, `docs/engine-versions.md`, `docs/sprt-results.md`, `docs/nnue-notes.md`
-- [ ] **D-003** Write project philosophy section in README
+- [x] **D-001** Initialize repo with `README.md` skeleton
+- [x] **D-002** Create `docs/roadmap.md`, `docs/engine-versions.md`, `docs/sprt-results.md`, `docs/nnue-notes.md`
+- [x] **D-003** Write project philosophy section in README
 
 ---
 
 ## Phase 1 — Board & Move Representation
 
 ### Track E
-- [ ] **E-006** [GATE: E-005] Define `Square`, `Piece`, `Color`, `PieceType` enums
-- [ ] **E-007** [GATE: E-006] `Bitboard` typedef (`uint64_t`) and helper ops (set/clear/test/popcount/lsb)
-- [ ] **E-008** [GATE: E-007] `Board` struct: `pieces[2][6]`, `occupancy[2]`, `all_occupancy`, side-to-move, castling, ep, halfmove, fullmove
-- [ ] **E-009** [GATE: E-008] Board printing / debug ASCII view
-- [ ] **E-010** [GATE: E-008] FEN parser
-- [ ] **E-011** [GATE: E-010] FEN serializer
-- [ ] **E-012** [GATE: E-006] `Move` compact encoding (uint32_t, from/to/promo/flags)
-- [ ] **E-013** [GATE: E-012] `move_to_uci` / `move_from_uci`
+- [x] **E-006** [GATE: E-005] Define `Square`, `Piece`, `Color`, `PieceType` enums [I decided to not include PieceType]
+- [x] **E-007** [GATE: E-006] `Bitboard` typedef (`uint64_t`) and helper ops (set/clear/test/popcount/lsb)
+- [x] **E-008** [GATE: E-007] `Board` struct: `pieces[2][6]`, `occupancy[2]`, `all_occupancy`, side-to-move, castling, ep, halfmove, fullmove
+- [x] **E-009** [GATE: E-008] Board printing / debug ASCII view
+- [x] **E-010** [GATE: E-008] FEN parser
+- [x] **E-011** [GATE: E-010] FEN serializer
+- [x] **E-012** [GATE: E-006] `Move` compact encoding (uint32_t, from/to/promo/flags)
+- [x] **E-013** [GATE: E-012] `move_to_uci` / `move_from_uci`
 
 ### Track T
-- [ ] **T-003** [GATE: E-007] Bitboard unit tests (a1=bit 0, h8=bit 63, etc.)
-- [ ] **T-004** [GATE: E-008] Board mutation tests (place/remove piece, occupancy stays consistent)
-- [ ] **T-005** [GATE: E-011] FEN round-trip tests (startpos, Kiwipete, special cases)
-- [ ] **T-006** [GATE: E-013] Move encode/decode tests, including promotion and castle flags
+- [x] **T-003** [GATE: E-007] Bitboard unit tests (a1=bit 0, h8=bit 63, etc.)
+- [x] **T-004** [GATE: E-008] Board mutation tests (place/remove piece, occupancy stays consistent)
+- [x] **T-005** [GATE: E-011] FEN round-trip tests (startpos, Kiwipete, special cases)
+- [x] **T-006** [GATE: E-013] Move encode/decode tests, including promotion and castle flags
 
 ---
 
