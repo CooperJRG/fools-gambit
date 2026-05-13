@@ -10,6 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(fools-gambit
     src/main.cpp
+    src/board/chess_board.cpp
 )
 
 # Include Google Test
