@@ -1,5 +1,6 @@
 #include "chess_board.h"
 #include <vector>
+#include <sstream>
 
 ChessBoard::ChessBoard() {
     whitePawns   = 0x000000000000FF00ULL;

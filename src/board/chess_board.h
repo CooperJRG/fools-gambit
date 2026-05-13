@@ -3,10 +3,10 @@
 #include "bitboard.h"
 #include "color.h"
 #include "square.h"
+#include "movegen/move.h"
 
 #include <cstdint>
 #include <string>
-#include <sstream>
 
 struct ChessBoard {
     Bitboard whitePawns;
@@ -53,4 +53,7 @@ struct ChessBoard {
     void loadFEN(const std::string &fen);
 
     std::string toFEN() const;
+
+    // Make a move on the board. This will be used by the move generator and search algorithm to update the board state after a move is made.
+    void makeMove(const Move &move);
 };

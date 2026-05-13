@@ -24,8 +24,8 @@ inline bool isBitSet(Bitboard board, Square square) {
 }
 
 // Count the number of set bits in a bitboard (population count) (use built-in function)
-inline Square countBits(Bitboard board) {
-    return static_cast<Square>(__builtin_popcountll(board));
+inline int countBits(Bitboard board) {
+    return (__builtin_popcountll(board));
 }
 
 // Get the index of the least significant set bit (LSB) in a bitboard

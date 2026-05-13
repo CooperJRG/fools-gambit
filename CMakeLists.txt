@@ -13,6 +13,8 @@ add_executable(fools-gambit
     src/board/chess_board.cpp
 )
 
+target_include_directories(fools-gambit PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
 # Include Google Test
 include(FetchContent)
 FetchContent_Declare(
@@ -28,7 +30,10 @@ include(GoogleTest)
 # Test executable
 add_executable(fools-gambit-tests
     tests/test_main.cpp
+    tests/board/test_bitboard.cpp
 )
+
+target_include_directories(fools-gambit-tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(fools-gambit-tests
     GTest::gtest_main
